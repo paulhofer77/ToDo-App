@@ -7,21 +7,31 @@
 //
 
 import UIKit
+import CoreData
 
 class ToDoListViewController: UITableViewController {
 
     var itemArray = [Item]()
     
-    let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
+    var selectedCategory: Category? {
+        didSet{
+            loadItems()
+        }
+    }
+
   
+    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        loadItems()
+        let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+        print(dataFilePath)
+    
+        
     }
 
-// MARK - Table View Data Source Methods
+    // MARK: - Table View Data Source Methods
     
     override func numberOfSections(in tableView: UITableView) -> Int {
         return 1
@@ -51,15 +61,19 @@ class ToDoListViewController: UITableViewController {
         return cell
     }
     
-    //MARK - Table View Delegate Methods
+    //MARK: - Table View Delegate Methods
     
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         
-//        print(itemArray[indexPath.row])
-        
         itemArray[indexPath.row].done = !itemArray[indexPath.row].done
+       
+/*        the order of these 2 functions mather a lot
+            context.delete(itemArray[indexPath.row])
+            itemArray.remove(at: indexPath.row)
+*/
+ 
+        
         saveItems()
-        tableView.reloadData()
         
         tableView.deselectRow(at: indexPath, animated: true)
         
@@ -67,21 +81,21 @@ class ToDoListViewController: UITableViewController {
         
     }
 
-     //MARK - Add New Items
+    //MARK: - Add New Items
     @IBAction func addButtonPressed(_ sender: UIBarButtonItem) {
         
         var textField:UITextField = UITextField()
         let alert = UIAlertController(title: "Add New To Do", message: "", preferredStyle: .alert)
         let action = UIAlertAction(title: "Add Item", style: .default) { (action) in
        //            what happens when the user clicks the add Button
-           
-            let newItem = Item()
+            
+            let newItem = Item(context: self.context)
             newItem.title = textField.text!
+            newItem.done = false
+            newItem.parentCategory = self.selectedCategory
             
             self.itemArray.append(newItem)
-            
-           self.saveItems()
-            
+            self.saveItems()
             self.tableView.reloadData()
       
         }
@@ -97,31 +111,74 @@ class ToDoListViewController: UITableViewController {
         
     }
     
-    //MARK - Model Manipulation Methods
+    //MARK: - Model Manipulation Methods
     func saveItems(){
-        let encoder = PropertyListEncoder()
+        
         do {
-            let data = try encoder.encode(itemArray)
-            try data.write(to: dataFilePath!)
+            try context.save()
         } catch {
-            print("Error Encoding Array, \(error)")
+            print("Error saving Context \(error)")
         }
+    
+        tableView.reloadData()
     }
    
-    func loadItems(){
-        if let data = try? Data(contentsOf: dataFilePath!) {
-            
-            let decoder = PropertyListDecoder()
-                do {
-                    itemArray = try decoder.decode([Item].self, from: data)
-                } catch {
-                    print("Error while decoding: \(error)")
-            }
+    
+    func loadItems(with request: NSFetchRequest<Item> = Item.fetchRequest(), predicate: NSPredicate? = nil) {
+//  diese Funktion hat einen Externen PArameter (with), einen internen Paramter (request) und einen Default Parameter (Item.fetchRequest)
+//  let request: NSFetchRequest<Item> = Item.fetchRequest() >> diuese zeile ist nicht notwendig, da sie als Default Paramter bereits oben eingefügt wurde
+//  wenn ein predicate in der funktion gegeben wird (siehe searchBar, dann werden 2 Predicates gemeinsam verwendent, wenn aber kein Prdicate in er Funktion mitgegeben wird, wird nur das category predicate verwendet
+       
+        let categoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
+       
+        if let additionalPredicate = predicate {
+            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, additionalPredicate])
+        }else {
+            request.predicate = categoryPredicate
         }
+
+        
+        do {
+            itemArray = try context.fetch(request)
+        }catch {
+            print("Error fetching data \(error)")
+        }
+   
+        tableView.reloadData()
     }
-    
-    
     
     
 }
+
+//MARK: - Search Bar Methods
+extension ToDoListViewController: UISearchBarDelegate {
+    
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        
+        let request: NSFetchRequest<Item> = Item.fetchRequest()
+        let predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
+        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+       
+        loadItems(with: request, predicate: predicate)
+        
+    }
+    
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        if searchBar.text?.count == 0 {
+            loadItems()
+            
+            DispatchQueue.main.async {
+                searchBar.resignFirstResponder()
+            }
+            
+        }
+        
+    }
+    
+    
+}
+
+
+
+
 
