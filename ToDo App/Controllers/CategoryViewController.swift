@@ -8,8 +8,9 @@
 
 import UIKit
 import RealmSwift
+import ChameleonFramework
 
-class CategoryViewController: UITableViewController {
+class CategoryViewController: SwipeTableViewController {
 
     let realm = try! Realm()
     
@@ -19,6 +20,8 @@ class CategoryViewController: UITableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         loadCategories()
+
+    
     }
 
     //Mark: - Table View Data Source Methods
@@ -28,10 +31,17 @@ class CategoryViewController: UITableViewController {
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "CategoryCell", for: indexPath)
-       
-        cell.textLabel?.text = categories?[indexPath.row].name ?? "Add your first Category"
         
+        let cell = super.tableView(tableView, cellForRowAt: indexPath)
+       
+        if let category = categories?[indexPath.row] {
+        
+            guard let categoryColor = UIColor(hexString: category.setColor) else { fatalError() }
+            cell.backgroundColor = categoryColor
+            cell.textLabel?.textColor = ContrastColorOf(categoryColor, returnFlat: true)
+            cell.textLabel?.text = category.name
+            
+    }
         return cell
     }
     
@@ -55,6 +65,22 @@ class CategoryViewController: UITableViewController {
         tableView.reloadData()
         
     }
+     //Mark: - Delete Data from Swip
+    
+    override func updateModel(at indexPath: IndexPath) {
+        
+        if let categoryDelete = self.categories?[indexPath.row] {
+            do {
+                try realm.write {
+                realm.delete(categoryDelete)
+                }
+            }catch {
+                print("Error while deleting \(error)")
+            }
+        }
+            
+    }
+    
     
     
     //Mark: - Add New Categories
@@ -68,6 +94,8 @@ class CategoryViewController: UITableViewController {
         let action = UIAlertAction(title: "Add Category", style: .default) { (action) in
             let newCategory = Category()
             newCategory.name = textfield.text!
+            
+            newCategory.setColor = UIColor.randomFlat.hexValue()
             
             self.save(category: newCategory)
             
@@ -92,6 +120,11 @@ class CategoryViewController: UITableViewController {
     
     }
     
+    
+    
+    
+    //Mark: - Segue Setup
+    
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         let destiantionVC = segue.destination as! ToDoListViewController
         
@@ -103,22 +136,5 @@ class CategoryViewController: UITableViewController {
     
     
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
 }
+
